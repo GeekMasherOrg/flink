@@ -40,6 +40,9 @@ Dependencies
 
 {{< sql_download_table "elastic" >}}
 
+The Elasticsearch connector is not part of the binary distribution.
+See how to link with it for cluster execution [here]({{< ref "docs/dev/configuration/overview" >}}).
+
 How to create an Elasticsearch table
 ----------------
 
@@ -48,7 +51,7 @@ The example below shows how to create an Elasticsearch sink table:
 ```sql
 CREATE TABLE myUserTable (
   user_id STRING,
-  user_name STRING
+  user_name STRING,
   uv BIGINT,
   pv BIGINT,
   PRIMARY KEY (user_id) NOT ENFORCED
@@ -67,15 +70,17 @@ Connector Options
       <tr>
         <th class="text-left" style="width: 25%">Option</th>
         <th class="text-center" style="width: 8%">Required</th>
+        <th class="text-center" style="width: 8%">Forwarded</th>
         <th class="text-center" style="width: 7%">Default</th>
         <th class="text-center" style="width: 10%">Type</th>
-        <th class="text-center" style="width: 50%">Description</th>
+        <th class="text-center" style="width: 42%">Description</th>
       </tr>
     </thead>
     <tbody>
     <tr>
       <td><h5>connector</h5></td>
       <td>required</td>
+      <td>no</td>
       <td style="word-wrap: break-word;">(none)</td>
       <td>String</td>
       <td>Specify what connector to use, valid values are:
@@ -87,6 +92,7 @@ Connector Options
     <tr>
       <td><h5>hosts</h5></td>
       <td>required</td>
+      <td>yes</td>
       <td style="word-wrap: break-word;">(none)</td>
       <td>String</td>
       <td>One or more Elasticsearch hosts to connect to, e.g. <code>'http://host_name:9092;http://host_name:9093'</code>.</td>
@@ -94,6 +100,7 @@ Connector Options
     <tr>
       <td><h5>index</h5></td>
       <td>required</td>
+      <td>yes</td>
       <td style="word-wrap: break-word;">(none)</td>
       <td>String</td>
       <td>Elasticsearch index for every record. Can be a static index (e.g. <code>'myIndex'</code>) or
@@ -103,6 +110,7 @@ Connector Options
     <tr>
       <td><h5>document-type</h5></td>
       <td>required in 6.x</td>
+      <td>yes in 6.x</td>
       <td style="word-wrap: break-word;">(none)</td>
       <td>String</td>
       <td>Elasticsearch document type. Not necessary anymore in <code>elasticsearch-7</code>.</td>
@@ -110,6 +118,7 @@ Connector Options
     <tr>
       <td><h5>document-id.key-delimiter</h5></td>
       <td>optional</td>
+      <td>yes</td>
       <td style="word-wrap: break-word;">_</td>
       <td>String</td>
       <td>Delimiter for composite keys ("_" by default), e.g., "$" would result in IDs "KEY1$KEY2$KEY3".</td>
@@ -117,6 +126,7 @@ Connector Options
     <tr>
       <td><h5>username</h5></td>
       <td>optional</td>
+      <td>yes</td>
       <td style="word-wrap: break-word;">(none)</td>
       <td>String</td>
       <td>Username used to connect to Elasticsearch instance. Please notice that Elasticsearch doesn't pre-bundled security feature, but you can enable it by following the <a href="https://www.elastic.co/guide/en/elasticsearch/reference/master/configuring-security.html">guideline</a> to secure an Elasticsearch cluster.</td>
@@ -124,6 +134,7 @@ Connector Options
     <tr>
       <td><h5>password</h5></td>
       <td>optional</td>
+      <td>yes</td>
       <td style="word-wrap: break-word;">(none)</td>
       <td>String</td>
       <td>Password used to connect to Elasticsearch instance. If <code>username</code> is configured, this option must be configured with non-empty string as well.</td>
@@ -131,6 +142,7 @@ Connector Options
     <tr>
       <td><h5>sink.delivery-guarantee</h5></td>
       <td>optional</td>
+      <td>no</td>
       <td style="word-wrap: break-word;">NONE</td>
       <td>String</td>
       <td>Optional delivery guarantee when committing. Valid values are <code>NONE</code> or <code>AT_LEAST_ONCE</code>.</td>
@@ -138,6 +150,7 @@ Connector Options
     <tr>
       <td><h5>sink.bulk-flush.max-actions</h5></td>
       <td>optional</td>
+      <td>yes</td>
       <td style="word-wrap: break-word;">1000</td>
       <td>Integer</td>
       <td>Maximum number of buffered actions per bulk request.
@@ -147,6 +160,7 @@ Connector Options
     <tr>
       <td><h5>sink.bulk-flush.max-size</h5></td>
       <td>optional</td>
+      <td>yes</td>
       <td style="word-wrap: break-word;">2mb</td>
       <td>MemorySize</td>
       <td>Maximum size in memory of buffered actions per bulk request. Must be in MB granularity.
@@ -156,6 +170,7 @@ Connector Options
     <tr>
       <td><h5>sink.bulk-flush.interval</h5></td>
       <td>optional</td>
+      <td>yes</td>
       <td style="word-wrap: break-word;">1s</td>
       <td>Duration</td>
       <td>The interval to flush buffered actions.
@@ -166,6 +181,7 @@ Connector Options
     <tr>
       <td><h5>sink.bulk-flush.backoff.strategy</h5></td>
       <td>optional</td>
+      <td>yes</td>
       <td style="word-wrap: break-word;">NONE</td>
       <td>String</td>
       <td>Specify how to perform retries if any flush actions failed due to a temporary request error. Valid strategies are:
@@ -179,6 +195,7 @@ Connector Options
     <tr>
       <td><h5>sink.bulk-flush.backoff.max-retries</h5></td>
       <td>optional</td>
+      <td>yes</td>
       <td style="word-wrap: break-word;">(none)</td>
       <td>Integer</td>
       <td>Maximum number of backoff retries.</td>
@@ -186,20 +203,65 @@ Connector Options
     <tr>
       <td><h5>sink.bulk-flush.backoff.delay</h5></td>
       <td>optional</td>
+      <td>yes</td>
       <td style="word-wrap: break-word;">(none)</td>
       <td>Duration</td>
       <td>Delay between each backoff attempt. For <code>CONSTANT</code> backoff, this is simply the delay between each retry. For <code>EXPONENTIAL</code> backoff, this is the initial base delay.</td>
     </tr>
     <tr>
+      <td><h5>sink.parallelism</h5></td>
+      <td>optional</td>
+      <td>no</td>
+      <td style="word-wrap: break-word;">(none)</td>
+      <td>Integer</td>
+      <td>Defines the parallelism of the Elasticsearch sink operator. By default, the parallelism is determined by the framework using the same parallelism of the upstream chained operator.</td>
+    </tr>
+    <tr>
       <td><h5>connection.path-prefix</h5></td>
       <td>optional</td>
+      <td>yes</td>
       <td style="word-wrap: break-word;">(none)</td>
       <td>String</td>
       <td>Prefix string to be added to every REST communication, e.g., <code>'/v1'</code>.</td>
     </tr>
     <tr>
+      <td><h5>connection.request-timeout</h5></td>
+      <td>optional</td>
+      <td>yes</td>
+      <td style="word-wrap: break-word;">(none)</td>
+      <td>Duration</td>
+      <td>The timeout in milliseconds for requesting a connection from the connection manager.
+        The timeout must be larger than or equal to 0.
+        A timeout value of zero is interpreted as an infinite timeout.
+      </td>
+    </tr>
+    <tr>
+      <td><h5>connection.timeout</h5></td>
+      <td>optional</td>
+      <td>yes</td>
+      <td style="word-wrap: break-word;">(none)</td>
+      <td>Duration</td>
+      <td>The timeout in milliseconds for establishing a connection.
+        The timeout must be larger than or equal to 0.
+        A timeout value of zero is interpreted as an infinite timeout.
+      </td>
+    </tr>
+    <tr>
+      <td><h5>socket.timeout</h5></td>
+      <td>optional</td>
+      <td>yes</td>
+      <td style="word-wrap: break-word;">(none)</td>
+      <td>Duration</td>
+      <td>The socket timeout (SO_TIMEOUT) for waiting for data or, put differently,
+        a maximum period inactivity between two consecutive data packets.
+        The timeout must be larger than or equal to 0.
+        A timeout value of zero is interpreted as an infinite timeout.
+      </td>
+    </tr>
+    <tr>
       <td><h5>format</h5></td>
       <td>optional</td>
+      <td>no</td>
       <td style="word-wrap: break-word;">json</td>
       <td>String</td>
       <td>Elasticsearch connector supports to specify a format. The format must produce a valid json document.

@@ -24,6 +24,7 @@ import org.apache.flink.table.types.logical.DistinctType;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.LogicalTypeFamily;
 import org.apache.flink.table.types.logical.LogicalTypeRoot;
+import org.apache.flink.table.types.logical.NullType;
 
 import javax.annotation.Nullable;
 
@@ -64,6 +65,7 @@ public class CastRuleProvider {
                 .addRule(IntervalToStringCastRule.INSTANCE)
                 .addRule(ArrayToStringCastRule.INSTANCE)
                 .addRule(MapAndMultisetToStringCastRule.INSTANCE)
+                .addRule(StructuredToStringCastRule.INSTANCE)
                 .addRule(RowToStringCastRule.INSTANCE)
                 .addRule(RawToStringCastRule.INSTANCE)
                 // From string rules
@@ -74,10 +76,15 @@ public class CastRuleProvider {
                 .addRule(StringToTimeCastRule.INSTANCE)
                 .addRule(StringToTimestampCastRule.INSTANCE)
                 .addRule(StringToBinaryCastRule.INSTANCE)
+                // To binary rules
+                .addRule(BinaryToBinaryCastRule.INSTANCE)
+                .addRule(RawToBinaryCastRule.INSTANCE)
                 // Collection rules
                 .addRule(ArrayToArrayCastRule.INSTANCE)
+                .addRule(MapToMapAndMultisetToMultisetCastRule.INSTANCE)
                 .addRule(RowToRowCastRule.INSTANCE)
                 // Special rules
+                .addRule(CharVarCharTrimPadCastRule.INSTANCE)
                 .addRule(NullToStringCastRule.INSTANCE)
                 .addRule(IdentityCastRule.INSTANCE);
     }
@@ -139,6 +146,25 @@ public class CastRuleProvider {
                         context, inputTerm, inputIsNullTerm, inputLogicalType, targetLogicalType);
     }
 
+    /**
+     * This method wraps {@link #generateCodeBlock(CodeGeneratorCastRule.Context, String, String,
+     * LogicalType, LogicalType)}, but adding the assumption that the inputTerm is always non-null.
+     * Used by {@link CodeGeneratorCastRule}s which checks for nullability, rather than deferring
+     * the check to the rules.
+     */
+    static @Nullable CastCodeBlock generateAlwaysNonNullCodeBlock(
+            CodeGeneratorCastRule.Context context,
+            String inputTerm,
+            LogicalType inputLogicalType,
+            LogicalType targetLogicalType) {
+        if (inputLogicalType instanceof NullType) {
+            return generateCodeBlock(
+                    context, inputTerm, "true", inputLogicalType, targetLogicalType);
+        }
+        return generateCodeBlock(
+                context, inputTerm, "false", inputLogicalType.copy(false), targetLogicalType);
+    }
+
     /* ------ Implementation ------ */
 
     // Map<Target family or root, Map<Input family or root, rule>>
@@ -148,10 +174,20 @@ public class CastRuleProvider {
     private CastRuleProvider addRule(CastRule<?, ?> rule) {
         CastRulePredicate predicate = rule.getPredicateDefinition();
 
-        for (LogicalTypeRoot targetTypeRoot : predicate.getTargetTypes()) {
+        for (LogicalType targetType : predicate.getTargetTypes()) {
+            final Map<Object, CastRule<?, ?>> map =
+                    rules.computeIfAbsent(targetType, k -> new HashMap<>());
+            for (LogicalTypeRoot inputTypeRoot : predicate.getInputTypeRoots()) {
+                map.put(inputTypeRoot, rule);
+            }
+            for (LogicalTypeFamily inputTypeFamily : predicate.getInputTypeFamilies()) {
+                map.put(inputTypeFamily, rule);
+            }
+        }
+        for (LogicalTypeRoot targetTypeRoot : predicate.getTargetTypeRoots()) {
             final Map<Object, CastRule<?, ?>> map =
                     rules.computeIfAbsent(targetTypeRoot, k -> new HashMap<>());
-            for (LogicalTypeRoot inputTypeRoot : predicate.getInputTypes()) {
+            for (LogicalTypeRoot inputTypeRoot : predicate.getInputTypeRoots()) {
                 map.put(inputTypeRoot, rule);
             }
             for (LogicalTypeFamily inputTypeFamily : predicate.getInputTypeFamilies()) {
@@ -161,7 +197,7 @@ public class CastRuleProvider {
         for (LogicalTypeFamily targetTypeFamily : predicate.getTargetTypeFamilies()) {
             final Map<Object, CastRule<?, ?>> map =
                     rules.computeIfAbsent(targetTypeFamily, k -> new HashMap<>());
-            for (LogicalTypeRoot inputTypeRoot : predicate.getInputTypes()) {
+            for (LogicalTypeRoot inputTypeRoot : predicate.getInputTypeRoots()) {
                 map.put(inputTypeRoot, rule);
             }
             for (LogicalTypeFamily inputTypeFamily : predicate.getInputTypeFamilies()) {
@@ -182,8 +218,10 @@ public class CastRuleProvider {
 
         final Iterator<Object> targetTypeRootFamilyIterator =
                 Stream.<Object>concat(
-                                Stream.of(targetType.getTypeRoot()),
-                                targetType.getTypeRoot().getFamilies().stream())
+                                Stream.of(targetType),
+                                Stream.<Object>concat(
+                                        Stream.of(targetType.getTypeRoot()),
+                                        targetType.getTypeRoot().getFamilies().stream()))
                         .iterator();
 
         // Try lookup by target type root/type families

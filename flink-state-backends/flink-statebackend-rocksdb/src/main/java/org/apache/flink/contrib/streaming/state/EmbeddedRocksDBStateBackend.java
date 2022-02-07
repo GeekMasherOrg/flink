@@ -302,6 +302,13 @@ public class EmbeddedRocksDBStateBackend extends AbstractManagedMemoryStateBacke
     //  State backend methods
     // ------------------------------------------------------------------------
 
+    @Override
+    public boolean supportsNoClaimRestoreMode() {
+        // We are able to create CheckpointType#FULL_CHECKPOINT. (we might potentially reupload some
+        // shared files when taking incremental snapshots)
+        return true;
+    }
+
     private void lazyInitializeForJob(
             Environment env, @SuppressWarnings("unused") String operatorIdentifier)
             throws IOException {
@@ -314,8 +321,7 @@ public class EmbeddedRocksDBStateBackend extends AbstractManagedMemoryStateBacke
 
         // initialize the paths where the local RocksDB files should be stored
         if (localRocksDbDirectories == null) {
-            // initialize from the temp directories
-            initializedDbBasePaths = env.getIOManager().getSpillingDirectories();
+            initializedDbBasePaths = new File[] {env.getTaskManagerInfo().getTmpWorkingDirectory()};
         } else {
             List<File> dirs = new ArrayList<>(localRocksDbDirectories.length);
             StringBuilder errorMessage = new StringBuilder();
@@ -407,7 +413,7 @@ public class EmbeddedRocksDBStateBackend extends AbstractManagedMemoryStateBacke
 
         // first, make sure that the RocksDB JNI library is loaded
         // we do this explicitly here to have better error handling
-        String tempDir = env.getTaskManagerInfo().getTmpDirectories()[0];
+        String tempDir = env.getTaskManagerInfo().getTmpWorkingDirectory().getAbsolutePath();
         ensureRocksDBIsLoaded(tempDir);
 
         // replace all characters that are not legal for filenames with underscore

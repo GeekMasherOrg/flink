@@ -31,11 +31,15 @@ public class DockerImageVersions {
     public static final String ELASTICSEARCH_6 =
             "docker.elastic.co/elasticsearch/elasticsearch:6.8.20";
 
-    public static final String KAFKA = "confluentinc/cp-kafka:6.2.1";
+    public static final String KAFKA = "confluentinc/cp-kafka:6.2.2";
 
     public static final String RABBITMQ = "rabbitmq:3.9.8-management-alpine";
 
     public static final String KINESALITE = "instructure/kinesalite:latest";
 
+    public static final String LOCALSTACK = "localstack/localstack:latest";
+
     public static final String PULSAR = "apachepulsar/pulsar:2.8.0";
+
+    public static final String CASSANDRA_3 = "cassandra:3.0";
 }

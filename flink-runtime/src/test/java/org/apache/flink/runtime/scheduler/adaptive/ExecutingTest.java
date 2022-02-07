@@ -21,6 +21,7 @@ package org.apache.flink.runtime.scheduler.adaptive;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.api.common.time.Time;
+import org.apache.flink.core.execution.SavepointFormatType;
 import org.apache.flink.core.testutils.CompletedScheduledFuture;
 import org.apache.flink.runtime.JobException;
 import org.apache.flink.runtime.blob.BlobWriter;
@@ -51,6 +52,7 @@ import org.apache.flink.runtime.executiongraph.failover.flip1.partitionrelease.P
 import org.apache.flink.runtime.io.network.partition.JobMasterPartitionTracker;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.runtime.jobgraph.JobVertex;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.scheduler.DefaultVertexParallelismInfo;
 import org.apache.flink.runtime.scheduler.ExecutionGraphHandler;
 import org.apache.flink.runtime.scheduler.OperatorCoordinatorHandler;
@@ -339,7 +341,7 @@ public class ExecutingTest extends TestLogger {
                             .build(ctx);
 
             ctx.setExpectStopWithSavepoint(assertNonNull());
-            exec.stopWithSavepoint("file:///tmp/target", true);
+            exec.stopWithSavepoint("file:///tmp/target", true, SavepointFormatType.CANONICAL);
         }
     }
 
@@ -367,7 +369,7 @@ public class ExecutingTest extends TestLogger {
             assertThat(coordinator.isPeriodicCheckpointingStarted(), is(true));
 
             ctx.setExpectStopWithSavepoint(assertNonNull());
-            exec.stopWithSavepoint("file:///tmp/target", true);
+            exec.stopWithSavepoint("file:///tmp/target", true, SavepointFormatType.CANONICAL);
 
             assertThat(coordinator.isPeriodicCheckpointingStarted(), is(false));
         }
@@ -755,10 +757,12 @@ public class ExecutingTest extends TestLogger {
             super(
                     new MockInternalExecutionGraphAccessor(),
                     new JobVertex("test"),
+                    new DefaultVertexParallelismInfo(1, 1, max -> Optional.empty()));
+
+            initialize(
                     1,
                     Time.milliseconds(1L),
                     1L,
-                    new DefaultVertexParallelismInfo(1, 1, max -> Optional.empty()),
                     new DefaultSubtaskAttemptNumberStore(Collections.emptyList()));
             mockExecutionVertex = executionVertexSupplier.apply(this);
         }
@@ -933,6 +937,18 @@ public class ExecutingTest extends TestLogger {
 
         @Override
         public void deleteBlobs(List<PermanentBlobKey> blobKeys) {
+            throw new UnsupportedOperationException(
+                    "This method is not supported by the MockInternalExecutionGraphAccessor.");
+        }
+
+        @Override
+        public ExecutionJobVertex getJobVertex(JobVertexID id) {
+            throw new UnsupportedOperationException(
+                    "This method is not supported by the MockInternalExecutionGraphAccessor.");
+        }
+
+        @Override
+        public boolean isDynamic() {
             throw new UnsupportedOperationException(
                     "This method is not supported by the MockInternalExecutionGraphAccessor.");
         }

@@ -35,7 +35,7 @@ under the License.
 	<properties>
 		<aws.sdk.version>1.12.7</aws.sdk.version>
 		<aws.sdkv2.version>2.17.52</aws.sdkv2.version>
-		<aws.kinesis-kcl.version>1.14.1</aws.kinesis-kcl.version>
+		<aws.kinesis-kcl.version>1.14.7</aws.kinesis-kcl.version>
 		<aws.kinesis-kpl.version>0.14.1</aws.kinesis-kpl.version>
 		<aws.dynamodbstreams-kinesis-adapter.version>1.5.3</aws.dynamodbstreams-kinesis-adapter.version>
 		<httpclient.version>4.5.13</httpclient.version>
@@ -142,6 +142,12 @@ under the License.
 
 		<dependency>
 			<groupId>org.apache.flink</groupId>
+			<artifactId>flink-connector-aws-kinesis-data-streams</artifactId>
+			<version>${project.version}</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.apache.flink</groupId>
 			<artifactId>flink-connector-aws-base</artifactId>
 			<version>${project.version}</version>
 		</dependency>
@@ -180,7 +186,7 @@ under the License.
 		</dependency>
 		<dependency>
 			<groupId>org.apache.flink</groupId>
-			<artifactId>flink-connector-testing</artifactId>
+			<artifactId>flink-connector-test-utils</artifactId>
 			<version>${project.version}</version>
 			<scope>test</scope>
 		</dependency>
@@ -193,6 +199,14 @@ under the License.
 		<dependency>
 			<groupId>org.apache.flink</groupId>
 			<artifactId>flink-runtime</artifactId>
+			<version>${project.version}</version>
+			<type>test-jar</type>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.apache.flink</groupId>
+			<artifactId>flink-connector-aws-kinesis-data-streams</artifactId>
 			<version>${project.version}</version>
 			<type>test-jar</type>
 			<scope>test</scope>
@@ -263,6 +277,13 @@ under the License.
 			<artifactId>jackson-dataformat-cbor</artifactId>
 		</dependency>
 
+		<!-- ArchUit test dependencies -->
+
+		<dependency>
+			<groupId>org.apache.flink</groupId>
+			<artifactId>flink-architecture-tests-test</artifactId>
+			<scope>test</scope>
+		</dependency>
 	</dependencies>
 
 	<build>
@@ -303,6 +324,7 @@ under the License.
 							<artifactSet combine.children="append">
 								<includes>
 									<include>org.apache.flink:flink-connector-aws-base:*</include>
+									<include>org.apache.flink:flink-connector-aws-kinesis-data-streams:*</include>
 									<include>com.amazonaws:*</include>
 									<include>com.google.protobuf:*</include>
 									<include>org.apache.httpcomponents:*</include>
@@ -374,6 +396,12 @@ under the License.
 									</excludes>
 								</filter>
 								<filter>
+									<artifact>org.apache.flink:flink-connector-aws-kinesis-data-streams:*</artifact>
+									<excludes>
+										<exclude>profile</exclude>
+									</excludes>
+								</filter>
+								<filter>
 									<artifact>org.apache.flink:flink-connector-aws-base:*</artifact>
 									<excludes>
 										<exclude>profile</exclude>
@@ -388,7 +416,6 @@ under the License.
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-surefire-plugin</artifactId>
-				<version>2.22.1</version>
 				<configuration>
 					<systemPropertyVariables>
 						<com.amazonaws.sdk.disableCbor>true</com.amazonaws.sdk.disableCbor>

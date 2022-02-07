@@ -19,6 +19,7 @@
 package org.apache.flink.state.changelog;
 
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.common.state.StateTtlConfig;
 import org.apache.flink.api.common.state.ValueState;
 import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
@@ -34,6 +35,8 @@ import org.apache.flink.runtime.checkpoint.CheckpointOptions;
 import org.apache.flink.runtime.execution.Environment;
 import org.apache.flink.runtime.mailbox.SyncMailboxExecutor;
 import org.apache.flink.runtime.metrics.groups.UnregisteredMetricGroups;
+import org.apache.flink.runtime.state.CheckpointStateOutputStream;
+import org.apache.flink.runtime.state.CheckpointStateToolset;
 import org.apache.flink.runtime.state.CheckpointStorageAccess;
 import org.apache.flink.runtime.state.CheckpointStorageLocation;
 import org.apache.flink.runtime.state.CheckpointStorageLocationReference;
@@ -44,11 +47,15 @@ import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyGroupedInternalPriorityQueue;
 import org.apache.flink.runtime.state.KeyedStateHandle;
 import org.apache.flink.runtime.state.SharedStateRegistry;
+import org.apache.flink.runtime.state.SharedStateRegistryImpl;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.StateBackendTestBase;
 import org.apache.flink.runtime.state.TestTaskStateManager;
 import org.apache.flink.runtime.state.VoidNamespace;
 import org.apache.flink.runtime.state.VoidNamespaceSerializer;
+import org.apache.flink.runtime.state.changelog.ChangelogStateHandle;
+import org.apache.flink.runtime.state.changelog.SequenceNumber;
+import org.apache.flink.runtime.state.changelog.StateChangelogWriter;
 import org.apache.flink.runtime.state.ttl.TtlTimeProvider;
 import org.apache.flink.runtime.testutils.statemigration.TestType;
 import org.apache.flink.util.CloseableIterator;
@@ -138,14 +145,20 @@ public class ChangelogStateBackendTestUtils {
     }
 
     public static void testMaterializedRestore(
-            StateBackend stateBackend, Environment env, CheckpointStreamFactory streamFactory)
+            StateBackend stateBackend,
+            StateTtlConfig stateTtlConfig,
+            Environment env,
+            CheckpointStreamFactory streamFactory)
             throws Exception {
-        SharedStateRegistry sharedStateRegistry = new SharedStateRegistry();
+        SharedStateRegistry sharedStateRegistry = new SharedStateRegistryImpl();
 
         TypeInformation<StateBackendTestBase.TestPojo> pojoType =
                 new GenericTypeInfo<>(StateBackendTestBase.TestPojo.class);
         ValueStateDescriptor<StateBackendTestBase.TestPojo> kvId =
                 new ValueStateDescriptor<>("id", pojoType);
+        if (stateTtlConfig.isEnabled()) {
+            kvId.enableTimeToLive(stateTtlConfig);
+        }
 
         ChangelogKeyedStateBackend<Integer> keyedBackend =
                 (ChangelogKeyedStateBackend<Integer>) createKeyedBackend(stateBackend, env);
@@ -165,11 +178,7 @@ public class ChangelogStateBackendTestUtils {
             keyedBackend.setCurrentKey(2);
             state.update(new StateBackendTestBase.TestPojo("u2", 2));
 
-            // In this test, every materialization is triggered explicitly by calling
-            // triggerMaterialization.
-            // Automatic/periodic triggering is disabled by NOT starting the
-            // periodicMaterializationManager
-            periodicMaterializationManager.triggerMaterialization();
+            materialize(keyedBackend, periodicMaterializationManager);
 
             keyedBackend.setCurrentKey(2);
             state.update(new StateBackendTestBase.TestPojo("u2", 22));
@@ -177,7 +186,7 @@ public class ChangelogStateBackendTestUtils {
             keyedBackend.setCurrentKey(3);
             state.update(new StateBackendTestBase.TestPojo("u3", 3));
 
-            periodicMaterializationManager.triggerMaterialization();
+            materialize(keyedBackend, periodicMaterializationManager);
 
             keyedBackend.setCurrentKey(4);
             state.update(new StateBackendTestBase.TestPojo("u4", 4));
@@ -229,10 +238,29 @@ public class ChangelogStateBackendTestUtils {
         }
     }
 
+    /**
+     * Explicitly trigger materialization. Materialization is expected to complete before returning
+     * from this method by the use of direct executor when constructing materializer.
+     * Automatic/periodic triggering is disabled by NOT starting the periodicMaterializationManager.
+     *
+     * <p>Additionally, verify changelog truncation happened upon completion.
+     */
+    private static void materialize(
+            ChangelogKeyedStateBackend<Integer> keyedBackend,
+            PeriodicMaterializationManager periodicMaterializationManager) {
+        StateChangelogWriter<? extends ChangelogStateHandle> writer =
+                keyedBackend.getChangelogWriter();
+        SequenceNumber sqnBefore = writer.lastAppendedSequenceNumber();
+        periodicMaterializationManager.triggerMaterialization();
+        assertTrue(
+                "Materialization didn't truncate the changelog",
+                sqnBefore.compareTo(writer.getLowestSequenceNumber()) <= 0);
+    }
+
     public static void testMaterializedRestoreForPriorityQueue(
             StateBackend stateBackend, Environment env, CheckpointStreamFactory streamFactory)
             throws Exception {
-        SharedStateRegistry sharedStateRegistry = new SharedStateRegistry();
+        SharedStateRegistry sharedStateRegistry = new SharedStateRegistryImpl();
         String fieldName = "key-grouped-priority-queue";
         ChangelogKeyedStateBackend<Integer> keyedBackend =
                 (ChangelogKeyedStateBackend<Integer>) createKeyedBackend(stateBackend, env);
@@ -261,12 +289,12 @@ public class ChangelogStateBackendTestUtils {
 
             assertThat(actualList, containsInAnyOrder(elementA100, elementA10, elementA20));
 
-            periodicMaterializationManager.triggerMaterialization();
+            materialize(keyedBackend, periodicMaterializationManager);
 
             TestType elementB9 = new TestType("b", 9);
             assertTrue(priorityQueue.add(elementB9));
 
-            periodicMaterializationManager.triggerMaterialization();
+            materialize(keyedBackend, periodicMaterializationManager);
 
             TestType elementC9 = new TestType("c", 9);
             TestType elementC8 = new TestType("c", 8);
@@ -329,7 +357,8 @@ public class ChangelogStateBackendTestUtils {
                 1);
     }
 
-    static class DummyCheckpointingStorageAccess implements CheckpointStorageAccess {
+    /** Dummy {@link CheckpointStorageAccess}. */
+    public static class DummyCheckpointingStorageAccess implements CheckpointStorageAccess {
 
         DummyCheckpointingStorageAccess() {}
 
@@ -373,7 +402,13 @@ public class ChangelogStateBackendTestUtils {
         }
 
         @Override
-        public CheckpointStreamFactory.CheckpointStateOutputStream createTaskOwnedStateStream() {
+        public CheckpointStateOutputStream createTaskOwnedStateStream() {
+            throw new UnsupportedOperationException(
+                    "Checkpoints are not supported in a single key state backend");
+        }
+
+        @Override
+        public CheckpointStateToolset createTaskOwnedCheckpointStateToolset() {
             throw new UnsupportedOperationException(
                     "Checkpoints are not supported in a single key state backend");
         }

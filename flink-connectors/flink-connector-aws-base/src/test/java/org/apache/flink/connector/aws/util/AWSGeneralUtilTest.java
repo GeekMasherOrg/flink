@@ -38,9 +38,11 @@ import software.amazon.awssdk.http.nio.netty.internal.NettyConfiguration;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.sts.auth.StsAssumeRoleCredentialsProvider;
 import software.amazon.awssdk.utils.AttributeMap;
+import software.amazon.awssdk.utils.ImmutableMap;
 
 import java.nio.file.Paths;
 import java.time.Duration;
+import java.util.Map;
 import java.util.Properties;
 
 import static org.apache.flink.connector.aws.config.AWSConfigConstants.AWS_CREDENTIALS_PROVIDER;
@@ -178,6 +180,15 @@ public class AWSGeneralUtilTest {
     }
 
     @Test
+    public void testGetCredentialsProviderFromMap() {
+        Map<String, Object> config = ImmutableMap.of(AWS_CREDENTIALS_PROVIDER, "AUTO");
+
+        AwsCredentialsProvider credentialsProvider = AWSGeneralUtil.getCredentialsProvider(config);
+
+        assertTrue(credentialsProvider instanceof DefaultCredentialsProvider);
+    }
+
+    @Test
     public void testGetCredentialsProviderAssumeRole() {
         Properties properties = spy(TestUtil.properties(AWS_CREDENTIALS_PROVIDER, "ASSUME_ROLE"));
         properties.setProperty(AWS_REGION, "eu-west-2");
@@ -241,6 +252,68 @@ public class AWSGeneralUtilTest {
         AwsCredentials credentials = credentialsProvider.resolveCredentials();
         assertEquals("22222222222222222222", credentials.accessKeyId());
         assertEquals("wJalrXUtnFEMI/K7MDENG/bPxRfiCY2222222222", credentials.secretAccessKey());
+    }
+
+    @Test
+    public void testCreateNettyAsyncHttpClientWithPropertyTcpKeepAlive() throws Exception {
+        SdkAsyncHttpClient httpClient = AWSGeneralUtil.createAsyncHttpClient(new Properties());
+        NettyConfiguration nettyConfiguration = TestUtil.getNettyConfiguration(httpClient);
+
+        assertTrue(nettyConfiguration.tcpKeepAlive());
+    }
+
+    @Test
+    public void testCreateNettyAsyncHttpClientWithPropertyMaxConcurrency() throws Exception {
+        int maxConnections = 45678;
+        Properties properties = new Properties();
+        properties.setProperty(
+                AWSConfigConstants.HTTP_CLIENT_MAX_CONCURRENCY, String.valueOf(maxConnections));
+
+        SdkAsyncHttpClient httpClient = AWSGeneralUtil.createAsyncHttpClient(properties);
+        NettyConfiguration nettyConfiguration = TestUtil.getNettyConfiguration(httpClient);
+
+        assertEquals(maxConnections, nettyConfiguration.maxConnections());
+    }
+
+    @Test
+    public void testCreateNettyAsyncHttpClientWithPropertyReadTimeout() throws Exception {
+        int readTimeoutMillis = 45678;
+        Properties properties = new Properties();
+        properties.setProperty(
+                AWSConfigConstants.HTTP_CLIENT_READ_TIMEOUT_MILLIS,
+                String.valueOf(readTimeoutMillis));
+
+        SdkAsyncHttpClient httpClient = AWSGeneralUtil.createAsyncHttpClient(properties);
+        NettyConfiguration nettyConfiguration = TestUtil.getNettyConfiguration(httpClient);
+
+        assertEquals(readTimeoutMillis, nettyConfiguration.readTimeoutMillis());
+    }
+
+    @Test
+    public void testCreateNettyAsyncHttpClientWithPropertyTrustAllCertificates() throws Exception {
+        boolean trustAllCerts = true;
+        Properties properties = new Properties();
+        properties.setProperty(
+                AWSConfigConstants.TRUST_ALL_CERTIFICATES, String.valueOf(trustAllCerts));
+
+        SdkAsyncHttpClient httpClient = AWSGeneralUtil.createAsyncHttpClient(properties);
+        NettyConfiguration nettyConfiguration = TestUtil.getNettyConfiguration(httpClient);
+
+        assertEquals(trustAllCerts, nettyConfiguration.trustAllCertificates());
+    }
+
+    @Test
+    public void testCreateNettyAsyncHttpClientWithPropertyProtocol() throws Exception {
+        Protocol httpVersion = HTTP1_1;
+        Properties properties = new Properties();
+        properties.setProperty(
+                AWSConfigConstants.HTTP_PROTOCOL_VERSION, String.valueOf(httpVersion));
+
+        SdkAsyncHttpClient httpClient = AWSGeneralUtil.createAsyncHttpClient(properties);
+        NettyConfiguration nettyConfiguration = TestUtil.getNettyConfiguration(httpClient);
+
+        assertEquals(
+                httpVersion, nettyConfiguration.attribute(SdkHttpConfigurationOption.PROTOCOL));
     }
 
     @Test

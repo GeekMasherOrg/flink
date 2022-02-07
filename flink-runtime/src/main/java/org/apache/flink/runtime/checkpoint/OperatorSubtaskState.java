@@ -107,6 +107,8 @@ public class OperatorSubtaskState implements CompositeStateHandle {
      */
     private final long stateSize;
 
+    private final long checkpointedSize;
+
     private OperatorSubtaskState(
             StateObjectCollection<OperatorStateHandle> managedOperatorState,
             StateObjectCollection<OperatorStateHandle> rawOperatorState,
@@ -133,6 +135,14 @@ public class OperatorSubtaskState implements CompositeStateHandle {
         calculateStateSize += inputChannelState.getStateSize();
         calculateStateSize += resultSubpartitionState.getStateSize();
         stateSize = calculateStateSize;
+
+        long calculateCheckpointedSize = managedOperatorState.getCheckpointedSize();
+        calculateCheckpointedSize += rawOperatorState.getCheckpointedSize();
+        calculateCheckpointedSize += managedKeyedState.getCheckpointedSize();
+        calculateCheckpointedSize += rawKeyedState.getCheckpointedSize();
+        calculateCheckpointedSize += inputChannelState.getCheckpointedSize();
+        calculateCheckpointedSize += resultSubpartitionState.getCheckpointedSize();
+        this.checkpointedSize = calculateCheckpointedSize;
     }
 
     @VisibleForTesting
@@ -205,18 +215,25 @@ public class OperatorSubtaskState implements CompositeStateHandle {
     }
 
     @Override
-    public void registerSharedStates(SharedStateRegistry sharedStateRegistry) {
-        registerSharedState(sharedStateRegistry, managedKeyedState);
-        registerSharedState(sharedStateRegistry, rawKeyedState);
+    public void registerSharedStates(SharedStateRegistry sharedStateRegistry, long checkpointID) {
+        registerSharedState(sharedStateRegistry, managedKeyedState, checkpointID);
+        registerSharedState(sharedStateRegistry, rawKeyedState, checkpointID);
     }
 
     private static void registerSharedState(
-            SharedStateRegistry sharedStateRegistry, Iterable<KeyedStateHandle> stateHandles) {
+            SharedStateRegistry sharedStateRegistry,
+            Iterable<KeyedStateHandle> stateHandles,
+            long checkpointID) {
         for (KeyedStateHandle stateHandle : stateHandles) {
             if (stateHandle != null) {
-                stateHandle.registerSharedStates(sharedStateRegistry);
+                stateHandle.registerSharedStates(sharedStateRegistry, checkpointID);
             }
         }
+    }
+
+    @Override
+    public long getCheckpointedSize() {
+        return checkpointedSize;
     }
 
     @Override
@@ -279,6 +296,7 @@ public class OperatorSubtaskState implements CompositeStateHandle {
         result = 31 * result + getInputRescalingDescriptor().hashCode();
         result = 31 * result + getOutputRescalingDescriptor().hashCode();
         result = 31 * result + (int) (getStateSize() ^ (getStateSize() >>> 32));
+        result = 31 * result + (int) (getCheckpointedSize() ^ (getCheckpointedSize() >>> 32));
         return result;
     }
 
@@ -299,6 +317,8 @@ public class OperatorSubtaskState implements CompositeStateHandle {
                 + resultSubpartitionState
                 + ", stateSize="
                 + stateSize
+                + ", checkpointedSize="
+                + checkpointedSize
                 + '}';
     }
 

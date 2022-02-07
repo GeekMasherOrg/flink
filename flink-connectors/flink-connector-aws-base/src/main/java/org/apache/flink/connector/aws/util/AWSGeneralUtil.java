@@ -43,6 +43,7 @@ import software.amazon.awssdk.utils.AttributeMap;
 
 import java.nio.file.Paths;
 import java.time.Duration;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 
@@ -85,6 +86,20 @@ public class AWSGeneralUtil {
         } else {
             return CredentialProvider.valueOf(configProps.getProperty(configPrefix));
         }
+    }
+
+    /**
+     * Return a {@link AwsCredentialsProvider} instance corresponding to the configuration
+     * properties.
+     *
+     * @param configProps the configuration property map
+     * @return The corresponding AWS Credentials Provider instance
+     */
+    public static AwsCredentialsProvider getCredentialsProvider(final Map<String, ?> configProps) {
+        Properties properties = new Properties();
+        properties.putAll(configProps);
+
+        return getCredentialsProvider(properties);
     }
 
     /**
@@ -207,6 +222,46 @@ public class AWSGeneralUtil {
                 .ifPresent(webIdentityBuilder::webIdentityTokenFile);
 
         return webIdentityBuilder.build();
+    }
+
+    public static SdkAsyncHttpClient createAsyncHttpClient(final Properties configProperties) {
+        final AttributeMap.Builder clientConfiguration =
+                AttributeMap.builder().put(SdkHttpConfigurationOption.TCP_KEEPALIVE, true);
+
+        Optional.ofNullable(
+                        configProperties.getProperty(
+                                AWSConfigConstants.HTTP_CLIENT_MAX_CONCURRENCY))
+                .map(Integer::parseInt)
+                .ifPresent(
+                        integer ->
+                                clientConfiguration.put(
+                                        SdkHttpConfigurationOption.MAX_CONNECTIONS, integer));
+
+        Optional.ofNullable(
+                        configProperties.getProperty(
+                                AWSConfigConstants.HTTP_CLIENT_READ_TIMEOUT_MILLIS))
+                .map(Integer::parseInt)
+                .map(Duration::ofMillis)
+                .ifPresent(
+                        timeout ->
+                                clientConfiguration.put(
+                                        SdkHttpConfigurationOption.READ_TIMEOUT, timeout));
+
+        Optional.ofNullable(configProperties.getProperty(AWSConfigConstants.TRUST_ALL_CERTIFICATES))
+                .map(Boolean::parseBoolean)
+                .ifPresent(
+                        bool ->
+                                clientConfiguration.put(
+                                        SdkHttpConfigurationOption.TRUST_ALL_CERTIFICATES, bool));
+
+        Optional.ofNullable(configProperties.getProperty(AWSConfigConstants.HTTP_PROTOCOL_VERSION))
+                .map(Protocol::valueOf)
+                .ifPresent(
+                        protocol ->
+                                clientConfiguration.put(
+                                        SdkHttpConfigurationOption.PROTOCOL, protocol));
+        return createAsyncHttpClient(
+                clientConfiguration.build(), NettyNioAsyncHttpClient.builder());
     }
 
     public static SdkAsyncHttpClient createAsyncHttpClient(

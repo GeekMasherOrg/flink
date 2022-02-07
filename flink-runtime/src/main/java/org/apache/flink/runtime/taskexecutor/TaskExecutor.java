@@ -21,6 +21,7 @@ package org.apache.flink.runtime.taskexecutor;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.time.Time;
+import org.apache.flink.configuration.ClusterOptions;
 import org.apache.flink.management.jmx.JMXService;
 import org.apache.flink.runtime.accumulators.AccumulatorSnapshot;
 import org.apache.flink.runtime.blob.JobPermanentBlobService;
@@ -30,8 +31,6 @@ import org.apache.flink.runtime.blob.TransientBlobService;
 import org.apache.flink.runtime.checkpoint.CheckpointException;
 import org.apache.flink.runtime.checkpoint.CheckpointFailureReason;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
-import org.apache.flink.runtime.checkpoint.CheckpointType;
-import org.apache.flink.runtime.checkpoint.CheckpointType.PostCheckpointAction;
 import org.apache.flink.runtime.checkpoint.JobManagerTaskRestore;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
@@ -90,7 +89,7 @@ import org.apache.flink.runtime.resourcemanager.ResourceManagerGateway;
 import org.apache.flink.runtime.resourcemanager.ResourceManagerId;
 import org.apache.flink.runtime.resourcemanager.TaskExecutorRegistration;
 import org.apache.flink.runtime.rest.messages.LogInfo;
-import org.apache.flink.runtime.rest.messages.taskmanager.ThreadDumpInfo;
+import org.apache.flink.runtime.rest.messages.ThreadDumpInfo;
 import org.apache.flink.runtime.rpc.FatalErrorHandler;
 import org.apache.flink.runtime.rpc.RpcEndpoint;
 import org.apache.flink.runtime.rpc.RpcService;
@@ -127,7 +126,6 @@ import org.apache.flink.runtime.taskmanager.Task;
 import org.apache.flink.runtime.taskmanager.TaskExecutionState;
 import org.apache.flink.runtime.taskmanager.TaskManagerActions;
 import org.apache.flink.runtime.taskmanager.UnresolvedTaskManagerLocation;
-import org.apache.flink.runtime.util.JvmUtils;
 import org.apache.flink.runtime.webmonitor.threadinfo.ThreadInfoSamplesRequest;
 import org.apache.flink.types.SerializableOptional;
 import org.apache.flink.util.ExceptionUtils;
@@ -149,7 +147,6 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.lang.management.ThreadInfo;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -953,13 +950,6 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
                 checkpointTimestamp,
                 executionAttemptID);
 
-        final CheckpointType checkpointType = checkpointOptions.getCheckpointType();
-        if (checkpointType.getPostCheckpointAction() == PostCheckpointAction.TERMINATE
-                && !(checkpointType.isSynchronous() && checkpointType.isSavepoint())) {
-            throw new IllegalArgumentException(
-                    "Only synchronous savepoints are allowed to advance the watermark to MAX.");
-        }
-
         final Task task = taskSlotTable.getTask(executionAttemptID);
 
         if (task != null) {
@@ -1272,17 +1262,11 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 
     @Override
     public CompletableFuture<ThreadDumpInfo> requestThreadDump(Time timeout) {
-        final Collection<ThreadInfo> threadDump = JvmUtils.createThreadDump();
-
-        final Collection<ThreadDumpInfo.ThreadInfo> threadInfos =
-                threadDump.stream()
-                        .map(
-                                threadInfo ->
-                                        ThreadDumpInfo.ThreadInfo.create(
-                                                threadInfo.getThreadName(), threadInfo.toString()))
-                        .collect(Collectors.toList());
-
-        return CompletableFuture.completedFuture(ThreadDumpInfo.create(threadInfos));
+        int stacktraceMaxDepth =
+                taskManagerConfiguration
+                        .getConfiguration()
+                        .get(ClusterOptions.THREAD_DUMP_STACKTRACE_MAX_DEPTH);
+        return CompletableFuture.completedFuture(ThreadDumpInfo.dumpAndCreate(stacktraceMaxDepth));
     }
 
     // ------------------------------------------------------------------------
