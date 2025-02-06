@@ -2684,6 +2684,10 @@ public class Configuration implements Iterable<Map.Entry<String, String>>, Writa
             return null;
         }
 
+        if (!isValidUrl(url)) {
+            throw new IOException("Invalid URL: " + url);
+        }
+
         URLConnection connection = url.openConnection();
         if (connection instanceof JarURLConnection) {
             // Disable caching for JarURLConnection to avoid sharing JarFile
@@ -2712,6 +2716,11 @@ public class Configuration implements Iterable<Map.Entry<String, String>>, Writa
                 StreamBootstrapper.getInstance(null, systemId, is),
                 false,
                 true);
+    }
+
+    private boolean isValidUrl(URL url) {
+        String allowedHost = "trusted.host.com"; // Replace with the actual allowed host
+        return allowedHost.equals(url.getHost());
     }
 
     private void loadResources(
