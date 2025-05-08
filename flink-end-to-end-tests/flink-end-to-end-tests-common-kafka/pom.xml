@@ -135,7 +135,7 @@ under the License.
 		<dependency>
 			<groupId>org.apache.avro</groupId>
 			<artifactId>avro</artifactId>
-			<version>1.10.0</version>
+			<version>1.11.4</version>
 			<scope>test</scope>
 		</dependency>
 

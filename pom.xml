@@ -124,7 +124,7 @@ under the License.
 		<zookeeper.version>3.5.9</zookeeper.version>
 		<curator.version>5.2.0</curator.version>
 		<prometheus.version>0.8.1</prometheus.version>
-		<avro.version>1.10.0</avro.version>
+		<avro.version>1.11.4</avro.version>
 		<javax.activation.api.version>1.2.0</javax.activation.api.version>
 		<jaxb.api.version>2.3.1</jaxb.api.version>
 		<junit4.version>4.13.2</junit4.version>
